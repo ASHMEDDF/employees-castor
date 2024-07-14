@@ -1,157 +1,120 @@
 package com.nn.castor.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nn.castor.domain.Employee;
-import com.nn.castor.domain.Position;
-import com.nn.castor.dto.ResponseEmployeeCreatedDto;
 import com.nn.castor.service.EmployeeService;
-import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.runner.RunWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.test.context.junit4.SpringRunner;
+import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnitRunner;
+import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.hamcrest.Matchers.is;
 
-@RunWith(SpringRunner.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@AutoConfigureMockMvc
+@RunWith(MockitoJUnitRunner.class)
 class EmployeeControllerTests {
+
+    private MockMvc mockMvc;
 
     @Mock
     private EmployeeService employeeService;
 
+    @Mock
+    private ObjectMapper objectMapper;
+
     @InjectMocks
     private EmployeeController employeeController;
 
-    @Test
-    void testGetAllEmployees() {
-        List<Employee> employees = new ArrayList<>();
-        employees.add(new Employee(
-                1L,
-                "John Doe",
-                "123456789",
-                "john.jpg",
-                new Date(),
-                new Position(
-                        1L,
-                        "scum Master")));
-        employees.add(new Employee(
-                2L,
-                "Jane Smith",
-                "987654321",
-                "jane.jpg",
-                new Date(),
-                new Position(
-                        1L,
-                        "scum Master")));
-        when(employeeService.getAllEmployees()).thenReturn(Optional.of(employees));
-
-        // Calling the controller method
-        Optional<List<Employee>> result = employeeController.getAllEmployees();
-
-        // Assertions
-        Assertions.assertTrue(result.isPresent());
-        Assertions.assertEquals(2, result.get().size());
+    @BeforeEach
+    public void setUp() {
+        MockitoAnnotations.openMocks(this);
+        mockMvc = MockMvcBuilders.standaloneSetup(employeeController).build();
     }
 
     @Test
-    void testGetEmployeeById() {
-        Employee employee = new Employee(
-                1L,
-                "John Doe",
-                "123456789",
-                "john.jpg",
-                new Date(),
-                new Position(
-                        1L,
-                        "scum Master"));
-        when(employeeService.getEmployeeId(1L)).thenReturn(Optional.of(employee));
+    void testGetAllEmployees() throws Exception {
+        Employee employee = new Employee();
+        List<Employee> employees = List.of(employee);
 
-        // Calling the controller method
-        ResponseEntity<Optional<Employee>> responseEntity = employeeController.getEmployeeById(1L);
+        given(employeeService.getAllEmployees()).willReturn(Optional.of(employees));
 
-        // Assertions
-        Assertions.assertEquals(HttpStatus.OK, responseEntity.getStatusCode());
-        Assertions.assertTrue(Objects.requireNonNull(responseEntity.getBody()).isPresent());
-        Assertions.assertEquals(employee, responseEntity.getBody().get());
+        mockMvc.perform(get("/api/employees"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").exists());
     }
 
     @Test
-    void testCreateEmployee_Success() {
-        // Mocking the behavior of EmployeeService
-        Employee employee = new Employee(
-                1L,
-                "John Doe",
-                "123456789",
-                "john.jpg",
-                new Date(),
-                new Position(
-                        1L,
-                        "scum Master"));
-        when(employeeService.saveNewEmployee(employee)).thenReturn(employee);
+    void testGetEmployeeById() throws Exception {
+        Employee employee = new Employee();
+        employee.setId(1L);
+        given(employeeService.getEmployeeId(anyLong())).willReturn(Optional.of(employee));
 
-        // Calling the controller method
-        ResponseEntity<ResponseEmployeeCreatedDto> responseEntity = employeeController.createEmployee(employee);
-
-        // Assertions
-        Assertions.assertEquals(HttpStatus.CREATED, responseEntity.getStatusCode());
-        Assertions.assertTrue(responseEntity.getBody() != null && responseEntity.getBody().getId() == 1L);
+        mockMvc.perform(get("/api/employees/{id}", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(1)));
     }
 
     @Test
-    void testUpdateEmployee_Success() {
-        // Mocking the behavior of EmployeeService
-        Employee employee = new Employee(
-                1L,
-                "John Doe",
-                "123456789",
-                "john.jpg",
-                new Date(),
-                new Position(
-                        1L,
-                        "scum Master"));
-        when(employeeService.updateEmployee(employee, 1L)).thenReturn(employee);
+    void testCreateEmployee() throws Exception {
+        Employee employee = new Employee();
+        employee.setId(1L);
+        String employeeJson = "{\"id\":1,\"name\":\"John\"}";
+        MockMultipartFile photoFile = new MockMultipartFile("photo", "photo.jpg", "image/jpeg", "some-image".getBytes());
+        MockMultipartFile employeePart = new MockMultipartFile("employee", "", "application/json", employeeJson.getBytes());
 
-        // Calling the controller method
-        ResponseEntity<Employee> responseEntity = employeeController.updateEmployee(1L, employee);
+        given(objectMapper.readValue(employeeJson, Employee.class)).willReturn(employee);
+        given(employeeService.saveNewEmployee(any(Employee.class), any(MultipartFile.class))).willReturn(employee);
 
-        // Assertions
-        Assertions.assertEquals(HttpStatus.OK, responseEntity.getStatusCode());
-        Assertions.assertTrue(responseEntity.getBody() != null && responseEntity.getBody().getId() == 1L);
+        mockMvc.perform(multipart("/api/employees")
+                        .file(photoFile)
+                        .file(employeePart)
+                        .contentType(MediaType.MULTIPART_FORM_DATA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(1)));
     }
 
     @Test
-    void testDeleteEmployee_Success() {
-        // Mocking the behavior of EmployeeService
-        when(employeeService.deleteEmployee(1L)).thenReturn(true);
+    void testUpdateEmployee() throws Exception {
+        Employee employee = new Employee();
+        employee.setId(1L);
+        given(employeeService.updateEmployee(any(Employee.class), anyLong())).willReturn(employee);
 
-        // Calling the controller method
-        ResponseEntity<Void> responseEntity = employeeController.deleteEmployee(1L);
-
-        // Assertions
-        Assertions.assertEquals(HttpStatus.OK, responseEntity.getStatusCode());
+        mockMvc.perform(put("/api/employees/{id}", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"id\":1,\"name\":\"John\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").exists());
     }
 
     @Test
-    void testDeleteEmployee_NotFound() {
-        when(employeeService.deleteEmployee(1L)).thenReturn(false);
+    void testDeleteEmployee() throws Exception {
+        given(employeeService.deleteEmployee(anyLong())).willReturn(true);
 
-        // Calling the controller method
-        ResponseEntity<Void> responseEntity = employeeController.deleteEmployee(1L);
+        mockMvc.perform(delete("/api/employees/{id}", 1L))
+                .andExpect(status().isOk());
+    }
 
-        // Assertions
-        Assertions.assertEquals(HttpStatus.NOT_FOUND, responseEntity.getStatusCode());
+    @Test
+    void testDeleteEmployeeNotFound() throws Exception {
+        given(employeeService.deleteEmployee(anyLong())).willReturn(false);
+
+        mockMvc.perform(delete("/api/employees/{id}", 1L))
+                .andExpect(status().isNotFound());
     }
 
 }

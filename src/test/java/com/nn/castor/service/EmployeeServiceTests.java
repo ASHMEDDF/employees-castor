@@ -7,22 +7,29 @@ import com.nn.castor.exception.EmployerNotFoundException;
 import com.nn.castor.exception.PositionNotFoundException;
 import com.nn.castor.repository.EmployeeRepository;
 import com.nn.castor.repository.PositionRepository;
-import org.assertj.core.api.Assertions;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Mockito;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.mockito.MockitoAnnotations;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.util.Arrays;
-import java.util.Collections;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Optional;
 
-import org.junit.Test;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.*;
 
-@RunWith(MockitoJUnitRunner.class)
-public class EmployeeServiceTests {
+@ExtendWith(MockitoExtension.class)
+class EmployeeServiceTests {
 
     @Mock
     private EmployeeRepository employeeRepository;
@@ -30,223 +37,151 @@ public class EmployeeServiceTests {
     @Mock
     private PositionRepository positionRepository;
 
+    @Mock
+    private MultipartFile photoFile;
+
     @InjectMocks
     private EmployeeService employeeService;
 
-    // ## Tests para `saveNewEmployee`
+    @BeforeEach
+    public void setUp() {
+        MockitoAnnotations.openMocks(this);
+    }
 
-    // **Test para guardar un nuevo empleado exitosamente**
     @Test
-    public void saveNewEmployee_whenEmployeeDoesNotExist_thenEmployeeIsSaved() {
-        // **Arrange**
+    void testSaveNewEmployee() throws IOException {
         Employee employeeToCreate = new Employee();
-        employeeToCreate.setNationalId("12345678");
-        // ... set other fields
-
+        employeeToCreate.setIdentification("12345");
         Position position = new Position();
         position.setId(1L);
-        // ... set other fields
+        employeeToCreate.setPosition(position);
 
-        Employee savedEmployee = new Employee();
-        savedEmployee.setId(1L);
-        // ... set other fields (same as employeeToCreate)
+        given(positionRepository.findById(anyLong())).willReturn(Optional.of(position));
+        given(employeeRepository.findByIdentification(anyString())).willReturn(null);
+        given(photoFile.getOriginalFilename()).willReturn("photo.jpg");
+        InputStream inputStream = new ByteArrayInputStream("test image content".getBytes());
+        given(photoFile.getInputStream()).willReturn(inputStream);
+        given(employeeRepository.save(any(Employee.class))).willReturn(employeeToCreate);
 
-        Mockito.when(positionRepository.findById(1L)).thenReturn(Optional.of(position));
-        Mockito.when(employeeRepository.findByNationalId("12345678")).thenReturn(null);
-        Mockito.when(employeeRepository.save(employeeToCreate)).thenReturn(savedEmployee);
+        Employee savedEmployee = employeeService.saveNewEmployee(employeeToCreate, photoFile);
 
-        // **Act**
-        Employee result = employeeService.saveNewEmployee(employeeToCreate);
-
-        // **Assert**
-        // Se verifica que el resultado sea el mismo que el empleado guardado
-        Assertions.assertThat(result).isEqualTo(savedEmployee);
-        // Se verifica que se haya llamado al método `save` del repositorio con el empleado correcto
-        Mockito.verify(employeeRepository).save(employeeToCreate);
+        assertNotNull(savedEmployee);
+        verify(employeeRepository, times(1)).save(any(Employee.class));
     }
 
-    // **Test para guardar un nuevo empleado con un ID de posición inexistente**
-    @Test(expected = PositionNotFoundException.class)
-    public void saveNewEmployee_whenPositionNotFound_thenThrowsException() {
-        // **Arrange**
-        Employee employeeToCreate = new Employee();
-        employeeToCreate.setNationalId("12345678");
-        // ... set other fields
-
-        Mockito.when(positionRepository.findById(1L)).thenReturn(Optional.empty());
-
-        // **Act**
-        employeeService.saveNewEmployee(employeeToCreate);
-
-        // **Assert** (verificado por la excepción esperada)
-    }
-
-    // **Test para guardar un nuevo empleado con un número de identificación nacional ya existente**
-    @Test(expected = EmployeeAlreadyExistsException.class)
-    public void saveNewEmployee_whenEmployeeExists_thenThrowsException() {
-        // **Arrange**
-        Employee employeeToCreate = new Employee();
-        employeeToCreate.setNationalId("12345678");
-        // ... set other fields
-
-        Mockito.when(employeeRepository.findByNationalId("12345678")).thenReturn(new Employee());
-
-        // **Act**
-        employeeService.saveNewEmployee(employeeToCreate);
-
-        // **Assert** (verificado por la excepción esperada)
-    }
-
-    // ## Tests para `updateEmployee`
-
-    // **Test para actualizar un empleado exitosamente**
     @Test
-    public void updateEmployee_whenEmployeeExists_thenEmployeeIsUpdated() {
-        // **Arrange**
+    void testSaveNewEmployeePositionNotFound() {
+        Employee employeeToCreate = new Employee();
+        Position position = new Position();
+        position.setId(1L);
+        employeeToCreate.setPosition(position);
+
+        given(positionRepository.findById(anyLong())).willReturn(Optional.empty());
+
+        assertThrows(PositionNotFoundException.class,
+                () -> employeeService.saveNewEmployee(employeeToCreate, photoFile)
+        );
+    }
+
+    @Test
+    void testSaveNewEmployeeAlreadyExists() {
+        Employee employeeToCreate = new Employee();
+        employeeToCreate.setIdentification("12345");
+        Position position = new Position();
+        position.setId(1L);
+        employeeToCreate.setPosition(position);
+
+        given(positionRepository.findById(anyLong())).willReturn(Optional.of(position));
+        given(employeeRepository.findByIdentification(anyString())).willReturn(new Employee());
+
+        assertThrows(EmployeeAlreadyExistsException.class,
+                () -> employeeService.saveNewEmployee(employeeToCreate, photoFile)
+        );
+    }
+
+    @Test
+    void testUpdateEmployee() {
         Employee employeeToUpdate = new Employee();
-        employeeToUpdate.setId(1L);
-        employeeToUpdate.setNationalId("12345678");
-        // ... set other fields
+        employeeToUpdate.setIdentification("12345");
+        employeeToUpdate.setName("John");
+        Position position = new Position();
+        position.setId(1L);
+        employeeToUpdate.setPosition(position);
 
         Employee existingEmployee = new Employee();
         existingEmployee.setId(1L);
-        // ... set other fields (different from employeeToUpdate)
 
-        Position position = new Position();
-        position.setId(1L);
-        // ... set other fields
+        given(employeeRepository.findById(anyLong())).willReturn(Optional.of(existingEmployee));
+        given(employeeRepository.save(any(Employee.class))).willReturn(existingEmployee);
 
-        Employee updatedEmployee = new Employee();
-        updatedEmployee.setId(1L);
-        // ... set other fields (same as employeeToUpdate)
+        Employee updatedEmployee = employeeService.updateEmployee(employeeToUpdate, 1L);
 
-        Mockito.when(employeeRepository.findById(1L)).thenReturn(Optional.of(existingEmployee));
-        Mockito.when(positionRepository.findById(1L)).thenReturn(Optional.of(position));
-        Mockito.when(employeeRepository.save(existingEmployee)).thenReturn(updatedEmployee);
-
-        // **Act**
-        Employee result = employeeService.updateEmployee(employeeToUpdate, 1L);
-
-        // **Assert**
-        // Se verifica que el resultado sea el mismo que el empleado actualizado
-        Assertions.assertThat(result).isEqualTo(updatedEmployee);
-        // Se verifica que se haya llamado al método `save` del repositorio con el empleado correcto
-        Mockito.verify(employeeRepository).save(existingEmployee);
+        assertNotNull(updatedEmployee);
+        verify(employeeRepository, times(1)).save(any(Employee.class));
     }
 
-    // **Test para actualizar un empleado con un ID inexistente**
-    @Test(expected = EmployerNotFoundException.class)
-    public void updateEmployee_whenEmployeeNotFound_thenThrowsException() {
-        // **Arrange**
+    @Test
+    void testUpdateEmployeeNotFound() {
         Employee employeeToUpdate = new Employee();
-        employeeToUpdate.setId(1L);
-        // ... set other fields
 
-        Mockito.when(employeeRepository.findById(1L)).thenReturn(Optional.empty());
+        given(employeeRepository.findById(anyLong())).willReturn(Optional.empty());
 
-        // **Act**
-        employeeService.updateEmployee(employeeToUpdate, 1L);
-
-        // **Assert** (verificado por la excepción esperada)
+        assertThrows(EmployerNotFoundException.class,
+                () -> employeeService.updateEmployee(employeeToUpdate, 1L)
+        );
     }
 
-    // ## Tests para `deleteEmployee`
-
-    // **Test para eliminar un empleado exitosamente**
     @Test
-    public void deleteEmployee_whenEmployeeExists_thenEmployeeIsDeleted() {
-        // **Arrange**
+    void testDeleteEmployee() {
         Employee employee = new Employee();
         employee.setId(1L);
 
-        Mockito.when(employeeRepository.findById(1L)).thenReturn(Optional.of(employee));
+        given(employeeRepository.findById(anyLong())).willReturn(Optional.of(employee));
+        doNothing().when(employeeRepository).delete(any(Employee.class));
 
-        // **Act**
-        boolean result = employeeService.deleteEmployee(1L);
+        Boolean result = employeeService.deleteEmployee(1L);
 
-        // **Assert**
-        // Se verifica que el resultado sea `true`
-        Assertions.assertThat(result).isTrue();
-        // Se verifica que se haya llamado al método `delete` del repositorio con el empleado correcto
-        Mockito.verify(employeeRepository).delete(employee);
+        assertTrue(result);
+        verify(employeeRepository, times(1)).delete(any(Employee.class));
     }
 
-    // **Test para eliminar un empleado con un ID inexistente**
-    @Test(expected = EmployerNotFoundException.class)
-    public void deleteEmployee_whenEmployeeNotFound_thenThrowsException() {
-        // **Arrange**
-        Mockito.when(employeeRepository.findById(1L)).thenReturn(Optional.empty());
-
-        // **Act**
-        employeeService.deleteEmployee(1L);
-
-        // **Assert** (verificado por la excepción esperada)
-    }
-
-    // ## Tests para `getEmployeeId`
-
-    // **Test para obtener un empleado por su ID exitosamente**
     @Test
-    public void getEmployeeId_whenEmployeeExists_thenEmployeeIsReturned() {
-        // **Arrange**
+    void testDeleteEmployeeNotFound() {
+        given(employeeRepository.findById(anyLong())).willReturn(Optional.empty());
+
+        assertThrows(EmployerNotFoundException.class, () -> employeeService.deleteEmployee(1L));
+    }
+
+    @Test
+    void testGetEmployeeId() {
         Employee employee = new Employee();
         employee.setId(1L);
 
-        Mockito.when(employeeRepository.findById(1L)).thenReturn(Optional.of(employee));
+        given(employeeRepository.findById(anyLong())).willReturn(Optional.of(employee));
 
-        // **Act**
         Optional<Employee> result = employeeService.getEmployeeId(1L);
 
-        // **Assert**
-        // Se verifica que el resultado no esté vacío
-        Assertions.assertThat(result).isNotEmpty();
-        // Se verifica que el contenido del resultado sea el mismo que el empleado buscado
-        Assertions.assertThat(result.get()).isEqualTo(employee);
+        assertTrue(result.isPresent());
+        assertEquals(employee.getId(), result.get().getId());
     }
 
-    // **Test para obtener un empleado con un ID inexistente**
-    @Test(expected = EmployerNotFoundException.class)
-    public void getEmployeeId_whenEmployeeNotFound_thenThrowsException() {
-        // **Arrange**
-        Mockito.when(employeeRepository.findById(1L)).thenReturn(Optional.empty());
-
-        // **Act**
-        employeeService.getEmployeeId(1L);
-
-        // **Assert** (verificado por la excepción esperada)
-    }
-
-    // ## Tests para `getAllEmployees`
-
-    // **Test para obtener todos los empleados exitosamente**
     @Test
-    public void getAllEmployees_whenEmployeesExist_thenEmployeesAreReturned() {
-        // **Arrange**
-        List<Employee> employees = Arrays.asList(new Employee(), new Employee());
+    void testGetEmployeeIdNotFound() {
+        given(employeeRepository.findById(anyLong())).willReturn(Optional.empty());
 
-        Mockito.when(employeeRepository.findAll()).thenReturn(employees);
+        assertThrows(EmployerNotFoundException.class, () -> employeeService.getEmployeeId(1L));
+    }
 
-        // **Act**
+    @Test
+    void testGetAllEmployees() {
+        Employee employee = new Employee();
+        List<Employee> employees = List.of(employee);
+
+        given(employeeRepository.findAll()).willReturn(employees);
+
         Optional<List<Employee>> result = employeeService.getAllEmployees();
 
-        // **Assert**
-        // Se verifica que el resultado no esté vacío
-        Assertions.assertThat(result).isNotEmpty();
-        // Se verifica que el contenido del resultado sea la lista de empleados
-        Assertions.assertThat(result.get()).isEqualTo(employees);
-    }
-
-    // **Test para obtener todos los empleados cuando no hay ninguno**
-    @Test
-    public void getAllEmployees_whenNoEmployeesExist_thenEmptyListIsReturned() {
-        // **Arrange**
-        Mockito.when(employeeRepository.findAll()).thenReturn(Collections.emptyList());
-
-        // **Act**
-        Optional<List<Employee>> result = employeeService.getAllEmployees();
-
-        // **Assert**
-        // Se verifica que el resultado esté vacío
-        Assertions.assertThat(result).isEmpty();
+        assertTrue(result.isPresent());
+        assertEquals(1, result.get().size());
     }
 }

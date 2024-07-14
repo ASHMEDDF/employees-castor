@@ -11,36 +11,56 @@ import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @AllArgsConstructor
 @Transactional
 public class EmployeeService {
 
+
     private EmployeeRepository employeeRepository;
     private PositionRepository positionRepository;
 
-    public Employee saveNewEmployee (@NonNull Employee employeeToCreate) {
+    private static final String IMAGE_DIR = "src/main/resources/images";
+
+    public Employee saveNewEmployee(Employee employeeToCreate, MultipartFile photoFile) throws IOException {
 
         Position position = positionRepository.findById(employeeToCreate.getPosition().getId())
-                .orElseThrow(PositionNotFoundException::new);
-        Employee byNationalId = employeeRepository.findByNationalId(employeeToCreate.getNationalId());
+                .orElseThrow(() -> new PositionNotFoundException(employeeToCreate.getPosition().getId()));
+        Employee byNationalId = employeeRepository.findByIdentification(employeeToCreate.getIdentification());
 
         if (byNationalId != null) {
-            throw new EmployeeAlreadyExistsException(employeeToCreate.getNationalId());
+            throw new EmployeeAlreadyExistsException(employeeToCreate.getIdentification());
         }
 
+        String photoPath = saveImage(photoFile);
+
         Employee newEmployee = new Employee();
-        newEmployee.setNationalId(employeeToCreate.getNationalId());
+        newEmployee.setIdentification(employeeToCreate.getIdentification());
         newEmployee.setName(employeeToCreate.getName());
-        newEmployee.setPhoto(employeeToCreate.getPhoto());
+        newEmployee.setPhotoPath(photoPath);
         newEmployee.setDateEntry(employeeToCreate.getDateEntry());
         newEmployee.setPosition(position);
 
         return employeeRepository.save(newEmployee);
+    }
+
+    private String saveImage(MultipartFile photoFile) throws IOException {
+        String fileName = UUID.randomUUID() + "_" + photoFile.getOriginalFilename();
+        Path imagePath = Paths.get(IMAGE_DIR, fileName);
+        Files.createDirectories(imagePath.getParent());
+        Files.copy(photoFile.getInputStream(), imagePath, StandardCopyOption.REPLACE_EXISTING);
+        return imagePath.toString();
     }
 
     public Employee updateEmployee (@NonNull Employee employeeToUpdate, Long idEmployee) {
@@ -48,9 +68,9 @@ public class EmployeeService {
         Employee employee = employeeRepository.findById(idEmployee)
                 .orElseThrow(() -> new EmployerNotFoundException(idEmployee));
 
-        employee.setNationalId(employeeToUpdate.getNationalId());
+        employee.setIdentification(employeeToUpdate.getIdentification());
         employee.setName(employeeToUpdate.getName());
-        employee.setPhoto(employeeToUpdate.getPhoto());
+        employee.setPhotoPath(employeeToUpdate.getPhotoPath());
         employee.setDateEntry(employeeToUpdate.getDateEntry());
         employee.setPosition(employeeToUpdate.getPosition());
 

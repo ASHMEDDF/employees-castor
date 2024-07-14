@@ -22,9 +22,9 @@ public class Employee {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    private String nationalId;
+    private String identification;
     private String name;
-    private String photo;
+    private String photoPath;
     private Date dateEntry;
 
     @ManyToOne

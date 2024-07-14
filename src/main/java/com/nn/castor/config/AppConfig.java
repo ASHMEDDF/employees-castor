@@ -15,13 +15,12 @@ public class AppConfig {
     @Bean
     CommandLineRunner initDatabase(EmployeeRepository employeeRepository, PositionRepository positionRepository) {
         return args -> {
-            // Crear las posiciones requeridas
+
             Position scrumMaster = new Position(1L, "Scrum Master");
-            Position developer = new Position(2L, "Desarrollador");
+            Position developer = new Position(2L, "Developer");
             Position qa = new Position(3L, "QA");
             Position po = new Position(4L, "PO");
 
-            // Guardar las posiciones en la base de datos
             positionRepository.saveAll(Arrays.asList(scrumMaster, developer, qa, po));
         };
     }

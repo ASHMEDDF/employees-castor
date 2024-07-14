@@ -1,15 +1,11 @@
 package com.nn.castor.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nn.castor.domain.Employee;
-import com.nn.castor.dto.ResponseEmployeeCreatedDto;
-import com.nn.castor.exception.EmployeeAlreadyExistsException;
-import com.nn.castor.exception.EmployerNotFoundException;
-import com.nn.castor.exception.PositionNotFoundException;
 import com.nn.castor.service.EmployeeService;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
-import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,8 +14,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 
@@ -29,81 +28,40 @@ import java.util.Optional;
 @AllArgsConstructor
 public class EmployeeController {
 
-    private EmployeeService employeeService;
+    @Autowired
+    private final EmployeeService employeeService;
+    private final ObjectMapper objectMapper;
 
-    // GET all employees
     @GetMapping
     public Optional<List<Employee>> getAllEmployees() {
         return employeeService.getAllEmployees();
     }
 
-    // GET a single employee by id
     @GetMapping("/{id}")
     public ResponseEntity<Optional<Employee>> getEmployeeById(@PathVariable(value = "id") Long employeeId) {
-        try {
-            return ResponseEntity.ok().body(employeeService.getEmployeeId(employeeId));
-        } catch (EmployerNotFoundException e) {
-            return ResponseEntity.status(409).build();
-        } catch (Exception e) {
-            return  ResponseEntity.internalServerError().build();
-        }
-
+        return ResponseEntity.ok().body(employeeService.getEmployeeId(employeeId));
     }
 
-    // CREATE a new employee
     @PostMapping
-    public ResponseEntity<ResponseEmployeeCreatedDto> createEmployee(@NotNull @Valid @RequestBody Employee employee) {
-
-        try {
-            Employee savedEmployee = employeeService.saveNewEmployee(employee);
-            ResponseEmployeeCreatedDto response = new ResponseEmployeeCreatedDto(
-                    savedEmployee.getId(),
-                    savedEmployee.getNationalId(),
-                    savedEmployee.getName(),
-                    savedEmployee.getPhoto(),
-                    savedEmployee.getDateEntry(),
-                    savedEmployee.getPosition()
-            );
-
-            return new ResponseEntity<>(response, HttpStatus.CREATED);
-        } catch (PositionNotFoundException e) {
-            return ResponseEntity.notFound().build();
-        } catch (EmployeeAlreadyExistsException e) {
-            return ResponseEntity.status(409).build();
-        } catch (Exception e) {
-            return  ResponseEntity.internalServerError().build();
-        }
+    public ResponseEntity<Employee> createEmployee(@RequestPart("employee") String employeeJson,
+                                                   @RequestPart("photo") MultipartFile photoFile) throws IOException {
+        Employee employee = objectMapper.readValue(employeeJson, Employee.class);
+        Employee createdEmployee = employeeService.saveNewEmployee(employee, photoFile);
+        return ResponseEntity.ok(createdEmployee);
     }
 
-    // UPDATE an existing employee
     @PutMapping("/{id}")
     public ResponseEntity<Employee> updateEmployee(@PathVariable(value = "id") Long employeeId,
                                                    @Valid @RequestBody Employee employeeDetails) {
-
-        try {
-            Employee updatedEmployee = employeeService.updateEmployee(employeeDetails, employeeId);
-            return ResponseEntity.ok(updatedEmployee);
-        } catch (EmployerNotFoundException e) {
-            return ResponseEntity.notFound().build();
-        } catch (Exception e) {
-            return  ResponseEntity.internalServerError().build();
-        }
+        Employee updatedEmployee = employeeService.updateEmployee(employeeDetails, employeeId);
+        return ResponseEntity.ok(updatedEmployee);
     }
 
-    // DELETE an employee
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteEmployee(@PathVariable(value = "id") Long employeeId) {
-
-        try {
-            if (Boolean.TRUE.equals(employeeService.deleteEmployee(employeeId))){
-                return ResponseEntity.ok().build();
-            }
-            return ResponseEntity.notFound().build();
-        } catch (EmployerNotFoundException e) {
-            return ResponseEntity.notFound().build();
-        } catch (Exception e) {
-            return  ResponseEntity.internalServerError().build();
+        if (Boolean.TRUE.equals(employeeService.deleteEmployee(employeeId))) {
+            return ResponseEntity.ok().build();
         }
-
+        return ResponseEntity.notFound().build();
     }
 }
